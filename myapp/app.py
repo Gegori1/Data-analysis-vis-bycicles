@@ -4,25 +4,48 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 from shiny import App, ui, render
+from numpy.polynomial import Polynomial
 
 # %% Load data
-# data_path = "Data"
 file_name = "base_de_datos_2013_2016.xlsx"
-
 data_file = Path(__file__).parent / file_name
 data = pd.read_excel(data_file)
 
 # UI
 app_ui = ui.page_fluid(
-    ui.row(
-        ui.column(6, ui.output_plot("lineplot1")),
-        ui.column(6, ui.output_plot("barplot1"))
-    ),
-    ui.row(
-        ui.column(6, ui.output_plot("lineplot2")),
-        ui.column(6, ui.output_plot("barplot2"))
-    ),
-    ui.input_select("group_by", "Group By", ["Date", "Month Name", "Product", "Segment", "Country"], selected="Date")
+    ui.navset_tab(
+        ui.nav_panel("Units Sold & Profit",
+            ui.row(
+                ui.column(6, ui.output_plot("lineplot1")),
+                ui.column(6, ui.output_plot("barplot1"))
+            ),
+            ui.row(
+                ui.column(6, ui.output_plot("lineplot2")),
+                ui.column(6, ui.output_plot("barplot2"))
+            ),
+            ui.input_select("group_by", "Group By", ["Date", "Month Name", "Product", "Segment", "Country"], selected="Date")
+        ),
+
+        ui.nav_panel("Units Sold vs Profit",
+            ui.row(
+                ui.column(6, ui.output_plot("scatterplot")),
+                ui.column(6, 
+                    ui.h3("Observations"),
+                    ui.tags.ul(
+                        ui.tags.li("Some entries show sales prices lower than manufacturing costs. Since Dim_Avg_Price has similar information, these entries were not considered anomalous. More data is needed for a conclusive analysis."),
+                        ui.h4("Other observations"),
+                        ui.tags.li("Sales peak in October and December, with smaller peaks in June, September, February, and April."),
+                        ui.tags.li("All products follow similar sales patterns."),
+                        ui.tags.li("Paseo leads in sales, nearly doubling the rest; others have uniform sales distribution."),
+                        ui.tags.li("The government holds the largest market share by a significant margin."),
+                        ui.tags.li("Sales are uniformly distributed across countries."),
+                        ui.tags.li("Three linear groups observed in profit vs. units sold for the government, aligning with COGS/Units Sold ratios.")
+                    )
+                )
+            ),
+            ui.input_select("segment_select", "Select Segment", data['Segment'].unique().tolist(), selected=data['Segment'].unique()[0])
+        )
+    )
 )
 
 # Server
@@ -136,6 +159,26 @@ def server(input, output, session):
             plt.xticks(rotation=45)
             plt.grid(True)
             return plt.gcf()
+
+    @output
+    @render.plot
+    def scatterplot():
+        segment = input.segment_select()
+        segment_data = data[data['Segment'] == segment]
+        
+        plt.figure(figsize=(12, 6))
+        plt.scatter(segment_data['Units Sold'], segment_data['Profit'], label='Data')
+        
+        p = Polynomial.fit(segment_data['Units Sold'], segment_data['Profit'], 1)
+        trendline = p.linspace(n=100)
+        
+        plt.plot(trendline[0], trendline[1], color='red', label='Trend Line')
+        plt.title(f'Profit vs Units Sold for {segment}')
+        plt.xlabel('Units Sold')
+        plt.ylabel('Profit')
+        plt.grid(True)
+        plt.legend()
+        return plt.gcf()
 
 # to run the app
 app = App(app_ui, server)
